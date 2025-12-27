@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VECTOR | THE AI ECOSYSTEM CLUB</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=Syncopate:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* =========================================
+           CORE SYSTEM VARIABLES
+           ========================================= */
+        :root {
+            --cyan: #00f3ff;
+            --purple: #bc13fe;
+            --red: #ff003c;
+            --gold: #ffd700;
+            --blue: #4a90e2;
+            --dark: #020202;
+            --glass: rgba(10, 15, 20, 0.75);
+            --border: rgba(255, 255, 255, 0.1);
+            --panel-bg: rgba(0, 0, 0, 0.6);
+        }
+
+        /* RESET & SCROLL */
+        * { box-sizing: border-box; cursor: none !important; user-select: none; }
+        body { 
+            margin: 0; background: var(--dark); color: white; 
+            font-family: 'Rajdhani', sans-serif; overflow: hidden; height: 100vh; 
+        }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        ::-webkit-scrollbar-thumb { background: var(--cyan); }
+
+        /* =========================================
+           VISUAL FX LAYERS
+           ========================================= */
+        #webgl-canvas { position: fixed; inset: 0; z-index: 0; }
+        
+        .scanlines {
+            position: fixed; inset: 0; background: linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.1) 50%);
+            background-size: 100% 3px; pointer-events: none; z-index: 10; opacity: 0.7;
+        }
+        
+        .vignette {
+            position: fixed; inset: 0; background: radial-gradient(circle, transparent 60%, black 150%);
+            pointer-events: none; z-index: 9;
+        }
+
+        /* CURSOR */
+        #cursor {
+            position: fixed; top: 0; left: 0; width: 20px; height: 20px;
+            border: 1px solid var(--cyan); border-radius: 50%;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 9999;
+            transition: width 0.1s, height 0.1s; mix-blend-mode: exclusion;
+        }
+        #cursor-dot {
+            position: fixed; top: 0; left: 0; width: 4px; height: 4px; background: var(--cyan);
+            border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 10000;
+        }
+
+        /* =========================================
+           UI ARCHITECTURE
+           ========================================= */
+        
+        /* SIDEBAR NAVIGATION */
+        .sidebar {
+            position: fixed; left: 0; top: 0; bottom: 0; width: 80px;
+            background: rgba(0,0,0,0.6); border-right: 1px solid var(--border);
+            backdrop-filter: blur(15px); z-index: 100;
+            display: flex; flex-direction: column; align-items: center; padding-top: 30px;
+        }
+
+        .brand-mark {
+            font-family: 'Orbitron'; font-weight: 900; font-size: 24px; color: var(--cyan);
+            margin-bottom: 50px; text-shadow: 0 0 10px var(--cyan); animation: pulse 3s infinite;
+        }
+
+        .nav-btn {
+            width: 50px; height: 50px; margin-bottom: 25px; border-radius: 12px;
+            display: flex; justify-content: center; align-items: center;
+            color: rgba(255,255,255,0.3); font-size: 20px; transition: 0.3s;
+            position: relative;
+        }
+        
+        .nav-btn::before {
+            content: ''; position: absolute; left: -15px; top: 50%; transform: translateY(-50%);
+            width: 3px; height: 0%; background: var(--cyan); transition: 0.3s;
+        }
+
+        .nav-btn:hover, .nav-btn.active {
+            color: var(--cyan); background: rgba(0, 243, 255, 0.05);
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.1);
+        }
+        .nav-btn.active::before { height: 60%; }
+
+        .nav-tooltip {
+            position: absolute; left: 70px; background: black; border: 1px solid var(--border);
+            color: var(--cyan); padding: 5px 10px; font-family: 'Share Tech Mono'; font-size: 10px;
+            opacity: 0; pointer-events: none; transition: 0.2s; white-space: nowrap; z-index: 101;
+        }
+        .nav-btn:hover .nav-tooltip { opacity: 1; left: 60px; }
+
+        /* CONTENT STAGE */
+        .stage {
+            position: fixed; left: 80px; top: 0; right: 0; bottom: 0;
+            padding: 0; overflow: hidden; z-index: 50;
+        }
+
+        .page {
+            position: absolute; inset: 0; padding: 60px 80px; overflow-y: auto;
+            opacity: 0; transform: scale(1.05); pointer-events: none; transition: 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex; flex-direction: column;
+        }
+
+        .page.active { opacity: 1; transform: scale(1); pointer-events: auto; }
+
+        /* =========================================
+           CONTENT STYLING
+           ========================================= */
+        
+        /* HEADERS */
+        .glitch-header {
+            font-family: 'Orbitron'; font-weight: 900; font-size: 6rem; line-height: 0.9;
+            text-transform: uppercase; margin-bottom: 10px; mix-blend-mode: screen;
+            position: relative;
+        }
+        
+        .sub-header {
+            font-family: 'Share Tech Mono'; font-size: 1.2rem; color: #888;
+            border-left: 2px solid var(--cyan); padding-left: 20px; margin-bottom: 50px;
+            max-width: 600px;
+        }
+
+        /* HOLOGRAPHIC CARDS */
+        .holo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-bottom: 50px; }
+        
+        .holo-card {
+            background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+            padding: 30px; backdrop-filter: blur(10px); position: relative;
+            transition: 0.3s; overflow: hidden;
+        }
+        
+        .holo-card::after {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(125deg, transparent 30%, rgba(255,255,255,0.05) 40%, transparent 50%);
+            transform: translateX(-100%); transition: 0.5s;
+        }
+        
+        .holo-card:hover { border-color: var(--cyan); transform: translateY(-5px); box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+        .holo-card:hover::after { transform: translateX(100%); }
+
+        .holo-card h3 { font-family: 'Orbitron'; font-size: 1.5rem; margin-bottom: 10px; color: white; }
+        .holo-card p { font-size: 0.9rem; color: #aaa; line-height: 1.5; }
+        .holo-icon { font-size: 2.5rem; margin-bottom: 20px; color: var(--cyan); }
+
+        /* TEAM LIST STYLES */
+        .syndicate-list { display: grid; gap: 15px; padding-bottom: 100px; }
+        
+        .agent-row {
+            display: flex; align-items: center; background: rgba(0,0,0,0.4);
+            border: 1px solid #222; padding: 15px 30px; transition: 0.3s;
+            cursor: pointer; position: relative;
+        }
+        
+        .agent-row:hover { background: rgba(0, 243, 255, 0.1); border-color: var(--cyan); padding-left: 50px; }
+        
+        .agent-id { font-family: 'Share Tech Mono'; color: #555; width: 80px; }
+        .agent-role { font-family: 'Orbitron'; color: var(--gold); width: 250px; font-size: 0.8rem; letter-spacing: 1px; }
+        .agent-name { font-family: 'Rajdhani'; font-weight: 700; font-size: 1.5rem; color: white; flex-grow: 1; }
+        .agent-status { font-family: 'Share Tech Mono'; font-size: 0.7rem; color: var(--cyan); border: 1px solid var(--cyan); padding: 2px 8px; }
+
+        /* DOSSIER MODAL */
+        #dossier-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 200;
+            display: none; justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        
+        .dossier-file {
+            width: 800px; height: 500px; background: #050505; border: 1px solid var(--cyan);
+            display: grid; grid-template-columns: 250px 1fr; position: relative;
+            box-shadow: 0 0 50px rgba(0, 243, 255, 0.2); animation: openDossier 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        .dossier-sidebar {
+            background: rgba(0, 243, 255, 0.05); border-right: 1px solid #333;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+        }
+
+        .dossier-photo {
+            width: 150px; height: 150px; background: #000; border: 2px solid var(--cyan);
+            display: flex; justify-content: center; align-items: center; font-size: 40px; color: #333;
+            margin-bottom: 20px; box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
+        }
+
+        .dossier-content { padding: 40px; position: relative; }
+        .dossier-close {
+            position: absolute; top: 20px; right: 20px; color: var(--red);
+            font-family: 'Orbitron'; cursor: pointer; border: 1px solid var(--red); padding: 5px 10px;
+        }
+        .dossier-close:hover { background: var(--red); color: black; }
+
+        .skill-matrix { margin-top: 30px; }
+        .skill-row { display: flex; align-items: center; margin-bottom: 10px; font-family: 'Share Tech Mono'; font-size: 12px; }
+        .skill-name { width: 100px; color: #888; }
+        .skill-track { flex-grow: 1; height: 4px; background: #222; }
+        .skill-val { height: 100%; background: var(--cyan); width: 0%; transition: 1s 0.3s; }
+
+        @keyframes openDossier { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* LOADING SCREEN */
+        #boot-screen {
+            position: fixed; inset: 0; background: #000; z-index: 99999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .boot-text { font-family: 'Share Tech Mono'; color: var(--cyan); margin-top: 10px; }
+        .loader-bar { width: 300px; height: 2px; background: #333; position: relative; overflow: hidden; }
+        .loader-fill { position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: var(--cyan); animation: bootLoad 2.5s forwards ease-in-out; }
+        @keyframes bootLoad { to { width: 100%; } }
+
+    </style>
+</head>
+<body>
+
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div id="cursor"></div>
+    <div id="cursor-dot"></div>
+
+    <canvas id="webgl-canvas"></canvas>
+
+    <div id="boot-screen">
+        <div style="font-family:'Orbitron'; font-size: 40px; letter-spacing: 5px; color:white; margin-bottom:20px;">VECTOR CLUB</div>
+        <div class="loader-bar"><div class="loader-fill"></div></div>
+        <div class="boot-text" id="boot-status">INITIALIZING KERNEL...</div>
+    </div>
+
+    <div class="sidebar">
+        <div class="brand-mark">V</div>
+        
+        <div class="nav-btn active" onclick="router('home')" onmouseenter="sfx('hover')">
+            <i class="fas fa-globe"></i><div class="nav-tooltip">HOME</div>
+        </div>
+        <div class="nav-btn" onclick="router('init')" onmouseenter="sfx('hover')">
+            <i class="fas fa-code-branch"></i><div class="nav-tooltip">INIT()</div>
+        </div>
+        <div class="nav-btn" onclick="router('stack')" onmouseenter="sfx('hover')">
+            <i class="fas fa-layer-group"></i><div class="nav-tooltip">THE STACK</div>
+        </div>
+        <div class="nav-btn" onclick="router('runtime')" onmouseenter="sfx('hover')">
+            <i class="fas fa-trophy"></i><div class="nav-tooltip">RUNTIME</div>
+        </div>
+        <div class="nav-btn" onclick="router('syndicate')" onmouseenter="sfx('hover')">
+            <i class="fas fa-users"></i><div class="nav-tooltip">SYNDICATE</div>
+        </div>
+    </div>
+
+    <div class="stage">
+        
+        <div id="page-home" class="page active">
+            <div style="height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                <h4 style="font-family:'Share Tech Mono'; color:var(--cyan); margin-bottom:10px;">|| SYSTEM STATUS: OPTIMAL</h4>
+                
+                <h1 class="glitch-header" style="color:white; font-size: 8rem;">VECTOR</h1>
+                <h4 class="glitch-header" style="color:white; font-size: 3rem;">The AI EcoSystem Club</h4>
+                
+                <p class="sub-header">
+                    The bridge between Academic Theory and Industrial Reality.<br>
+                    We Initialize Potential. We Build the Stack. We Execute at Runtime.
+                </p>
+                <div style="display:flex; gap:20px;">
+                    <button onclick="router('init')" style="padding:15px 40px; background:var(--cyan); color:black; font-family:'Orbitron'; font-weight:bold; border:none; cursor:pointer; clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%); transition:0.3s;" onmouseenter="sfx('hover')">ENTER SYSTEM</button>
+                    <button onclick="router('syndicate')" style="padding:15px 40px; background:transparent; color:var(--cyan); border:1px solid var(--cyan); font-family:'Orbitron'; font-weight:bold; cursor:pointer; clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%); transition:0.3s;" onmouseenter="sfx('hover')">VIEW AGENTS</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-init" class="page">
+            <h1 class="glitch-header" style="color:var(--blue)">NODE 01: INIT()</h1>
+            <p class="sub-header" style="border-color:var(--blue)">The Foundation Layer. Logic, Algorithms, and Career Roadmaps.</p>
+            
+            <div class="holo-grid">
+                <div class="holo-card" style="border-top:2px solid var(--blue)">
+                    <i class="fab fa-python holo-icon" style="color:var(--blue)"></i>
+                    <h3>PYTHON ZERO</h3>
+                    <p>From "Hello World" to automation scripts. We teach the language of AI from scratch.</p>
+                </div>
+                <div class="holo-card" style="border-top:2px solid var(--blue)">
+                    <i class="fas fa-brain holo-icon" style="color:var(--blue)"></i>
+                    <h3>LOGIC LABS</h3>
+                    <p>Pure algorithmic thinking sessions. No syntax, just flowcharting and pseudocode problem solving.</p>
+                </div>
+                <div class="holo-card" style="border-top:2px solid var(--blue)">
+                    <i class="fas fa-map-signs holo-icon" style="color:var(--blue)"></i>
+                    <h3>ROADMAPS</h3>
+                    <p>Detailed career paths for Web Dev, Data Science, and Cloud Engineering.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-stack" class="page">
+            <h1 class="glitch-header" style="color:var(--purple)">NODE 02: STACK</h1>
+            <p class="sub-header" style="border-color:var(--purple)">The Arsenal. Industrial Tools for Modern Engineering.</p>
+            
+            <div class="holo-grid">
+                <div class="holo-card" style="border-top:2px solid var(--purple)">
+                    <i class="fab fa-github holo-icon" style="color:var(--purple)"></i>
+                    <h3>GIT PROTOCOL</h3>
+                    <p>Mandatory Version Control training. Branching, Merging, and Open Source contributions.</p>
+                </div>
+                <div class="holo-card" style="border-top:2px solid var(--purple)">
+                    <i class="fas fa-server holo-icon" style="color:var(--purple)"></i>
+                    <h3>CLOUD OPS</h3>
+                    <p>Deployment training on Docker, Kubernetes, and AWS. Stop using localhost.</p>
+                </div>
+                <div class="holo-card" style="border-top:2px solid var(--purple)">
+                    <i class="fas fa-microchip holo-icon" style="color:var(--purple)"></i>
+                    <h3>NVIDIA DLI</h3>
+                    <p>Exclusive workshops using NVIDIA's Deep Learning Institute resources.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-runtime" class="page">
+            <h1 class="glitch-header" style="color:var(--red)">NODE 03: RUNTIME</h1>
+            <p class="sub-header" style="border-color:var(--red)">The War Zone. Execution under extreme pressure.</p>
+            
+            <div class="holo-grid">
+                <div class="holo-card" style="border-top:2px solid var(--red)">
+                    <i class="fas fa-biohazard holo-icon" style="color:var(--red)"></i>
+                    <h3>NATURAL SELECTION</h3>
+                    <p>The flagship 24-Hour Hackathon. Only the most efficient code survives.</p>
+                </div>
+                <div class="holo-card" style="border-top:2px solid var(--red)">
+                    <i class="fas fa-bug holo-icon" style="color:var(--red)"></i>
+                    <h3>BUG BOUNTY</h3>
+                    <p>Find errors in open source projects. Fix them. Earn V-Tokens.</p>
+                </div>
+                <div class="holo-card" style="border-top:2px solid var(--red)">
+                    <i class="fas fa-code holo-icon" style="color:var(--red)"></i>
+                    <h3>LEETCODE SPRINT</h3>
+                    <p>Weekly competitive programming sessions to crack FAANG interviews.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-syndicate" class="page">
+            <h1 class="glitch-header" style="color:var(--gold); font-size:5rem;">THE SYNDICATE</h1>
+            <p class="sub-header" style="border-color:var(--gold)">The 15-Unit Command Chain. Select an Agent to view dossier.</p>
+            
+            <div class="syndicate-list" id="team-list-container">
+                </div>
+        </div>
+
+    </div>
+
+    <div id="dossier-overlay">
+        <div class="dossier-file">
+            <div class="dossier-close" onclick="closeDossier()">CLOSE_FILE [X]</div>
+            
+            <div class="dossier-sidebar">
+                <div class="dossier-photo">
+                    <i class="fas fa-user-secret"></i>
+                </div>
+                <div style="font-family:'Share Tech Mono'; color:var(--cyan); font-size:12px;">ID: <span id="dos-id">UNKNOWN</span></div>
+                <div style="font-family:'Orbitron'; color:var(--gold); margin-top:5px;" id="dos-role">UNKNOWN</div>
+            </div>
+            
+            <div class="dossier-content">
+                <h2 id="dos-name" style="font-family:'Orbitron'; font-size:2rem; color:white; margin:0;">NAME</h2>
+                <div style="width:50px; height:2px; background:var(--cyan); margin: 10px 0 20px 0;"></div>
+                <p id="dos-bio" style="font-family:'Rajdhani'; color:#ccc; line-height:1.6;">Accessing confidential biography...</p>
+                
+                <div class="skill-matrix">
+                    <h4 style="font-family:'Orbitron'; font-size:12px; color:var(--cyan); margin-bottom:15px;">PERFORMANCE METRICS</h4>
+                    
+                    <div class="skill-row">
+                        <div class="skill-name">LEADERSHIP</div>
+                        <div class="skill-track"><div class="skill-val" id="bar-lead" style="width:0%"></div></div>
+                    </div>
+                    <div class="skill-row">
+                        <div class="skill-name">TECHNICAL</div>
+                        <div class="skill-track"><div class="skill-val" id="bar-tech" style="width:0%"></div></div>
+                    </div>
+                    <div class="skill-row">
+                        <div class="skill-name">CREATIVITY</div>
+                        <div class="skill-track"><div class="skill-val" id="bar-creat" style="width:0%"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.126.1/build/three.module.js';
+        
+        // --- DATA: THE 15 AGENTS ---
+        const agents = [
+            // TIER 1
+            { id: "SYS_ADM_01", name: "ADITYA GAWNER", role: "THE ARCHITECT", bio: "Founder & System Architect. Responsible for the ultimate vision, code structure, and political navigation of Vector. Level 5 Clearance.", stats: [98, 95, 90] },
+            { id: "OPS_LEAD", name: "NAME HERE", role: "VECTOR ALPHA", bio: "VP of Operations. Manages logistics, hardware permissions, and discipline. The backbone of physical execution.", stats: [95, 70, 80] },
+            { id: "TECH_LEAD", name: "NAME HERE", role: "VECTOR BETA", bio: "VP of Technology. Quality control for code curriculum. Ensures the Tech Stack remains cutting edge.", stats: [80, 98, 85] },
+            
+            // TIER 2 (PRIMES)
+            { id: "NODE_01", name: "NAME HERE", role: "INIT PRIME", bio: "Head of Foundation. Expert in simplifying complex topics for beginners. Extremely patient.", stats: [85, 80, 75] },
+            { id: "NODE_02", name: "NAME HERE", role: "STACK PRIME", bio: "Head of Tools. Obsessed with new frameworks, cloud tech, and automation.", stats: [75, 95, 70] },
+            { id: "NODE_03", name: "NAME HERE", role: "RUNTIME PRIME", bio: "Head of Competition. Competitive coder with high rank on LeetCode/CodeChef.", stats: [70, 98, 60] },
+
+            // TIER 3 (I/O)
+            { id: "AUDIO_OUT", name: "NAME HERE", role: "THE FREQUENCY", bio: "Lead Speaker. Charismatic presenter capable of explaining code without boring the audience.", stats: [90, 80, 80] },
+            { id: "USR_IN", name: "NAME HERE", role: "THE INTERFACE", bio: "Community Manager & Host. Bridges the gap between tech team and students.", stats: [95, 60, 90] },
+
+            // TIER 4 (OPTICS)
+            { id: "VIS_LEAD", name: "NAME HERE", role: "VISIONARY LEAD", bio: "Head of Design. Creates the Cyberpunk aesthetic for all posters and assets.", stats: [70, 60, 99] },
+            { id: "RNDR_AGT", name: "NAME HERE", role: "RENDER AGENT", bio: "Video Specialist. Creates high-energy motion graphics and event reels.", stats: [60, 50, 95] },
+
+            // TIER 5 (UPLINK)
+            { id: "NET_LEAD", name: "NAME HERE", role: "NETWORK LEAD", bio: "PR Head. Manages LinkedIn presence and formal communications with guests.", stats: [90, 50, 80] },
+            { id: "SIG_AGT", name: "NAME HERE", role: "SIGNAL AGENT", bio: "Outreach Specialist. Ensures information reaches every student device.", stats: [85, 40, 70] },
+
+            // TIER 6 (RUNTIME)
+            { id: "UNIT_01", name: "NAME HERE", role: "RUNTIME UNIT 01", bio: "Hardware Specialist. Audio/Visual setup and networking.", stats: [60, 70, 60] },
+            { id: "UNIT_02", name: "NAME HERE", role: "RUNTIME UNIT 02", bio: "Debug Specialist. Floats during workshops to fix errors.", stats: [50, 85, 50] },
+            { id: "UNIT_03", name: "NAME HERE", role: "RUNTIME UNIT 03", bio: "Logistics Specialist. Crowd control and resource management.", stats: [70, 50, 60] }
+        ];
+
+        // --- POPULATE TEAM LIST ---
+        const listContainer = document.getElementById('team-list-container');
+        agents.forEach((agent, index) => {
+            const row = document.createElement('div');
+            row.className = 'agent-row';
+            row.innerHTML = `
+                <div class="agent-id">${agent.id}</div>
+                <div class="agent-role">${agent.role}</div>
+                <div class="agent-name">${agent.name}</div>
+                <div class="agent-status">ACTIVE</div>
+            `;
+            row.onclick = () => openDossier(index);
+            row.onmouseenter = () => sfx('click');
+            listContainer.appendChild(row);
+        });
+
+        // --- AUDIO ENGINE ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        window.sfx = (type) => {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            const t = audioCtx.currentTime;
+            
+            if(type === 'hover') {
+                osc.frequency.setValueAtTime(200, t); osc.frequency.linearRampToValueAtTime(300, t+0.05);
+                gain.gain.setValueAtTime(0.05, t); gain.gain.exponentialRampToValueAtTime(0.001, t+0.05);
+                osc.start(t); osc.stop(t+0.05);
+            }
+            if(type === 'click') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(500, t);
+                gain.gain.setValueAtTime(0.05, t); gain.gain.exponentialRampToValueAtTime(0.001, t+0.1);
+                osc.start(t); osc.stop(t+0.1);
+            }
+            if(type === 'warp') {
+                osc.frequency.setValueAtTime(100, t); osc.frequency.exponentialRampToValueAtTime(1000, t+0.5);
+                gain.gain.setValueAtTime(0.1, t); gain.gain.linearRampToValueAtTime(0, t+0.5);
+                osc.start(t); osc.stop(t+0.5);
+            }
+        };
+
+        // --- 3D ENGINE ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020202, 0.02);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.z = 30;
+        
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        // PARTICLES
+        const count = 5000;
+        const geometry = new THREE.BufferGeometry();
+        const pos = new Float32Array(count * 3);
+        const target = new Float32Array(count * 3);
+        
+        for(let i=0; i<count*3; i++) {
+            pos[i] = (Math.random()-0.5) * 50;
+            target[i] = pos[i];
+        }
+        
+        geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const material = new THREE.PointsMaterial({ size: 0.15, color: 0x00f3ff, transparent: true, opacity: 0.8 });
+        const mesh = new THREE.Points(geometry, material);
+        scene.add(mesh);
+
+        // MORPH LOGIC
+        window.router = (page) => {
+            sfx('warp');
+            
+            // DOM SWITCH
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-'+page).classList.add('active');
+            
+            // NAV ACTIVE
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            // 3D MORPH
+            let color = 0x00f3ff;
+            let shape = 'sphere';
+            
+            if(page === 'init') { color = 0x4a90e2; shape = 'helix'; }
+            if(page === 'stack') { color = 0xbc13fe; shape = 'grid'; }
+            if(page === 'runtime') { color = 0xff003c; shape = 'ring'; }
+            if(page === 'syndicate') { color = 0xffd700; shape = 'wall'; }
+
+            material.color.setHex(color);
+
+            for(let i=0; i<count; i++) {
+                const i3 = i*3;
+                if(shape === 'sphere') {
+                    target[i3] = (Math.random()-0.5)*40;
+                    target[i3+1] = (Math.random()-0.5)*40;
+                    target[i3+2] = (Math.random()-0.5)*40;
+                }
+                else if(shape === 'helix') {
+                    const angle = i * 0.1;
+                    target[i3] = Math.cos(angle) * 10;
+                    target[i3+1] = (i * 0.02) - 30;
+                    target[i3+2] = Math.sin(angle) * 10;
+                }
+                else if(shape === 'grid') {
+                    target[i3] = (i % 50) * 1 - 25;
+                    target[i3+1] = -10 + Math.random();
+                    target[i3+2] = Math.floor(i / 50) * 1 - 50;
+                }
+                else if(shape === 'wall') {
+                      target[i3] = (i % 60) * 0.5 - 15;
+                      target[i3+1] = Math.floor(i / 60) * 0.5 - 15;
+                      target[i3+2] = 0;
+                }
+                else if(shape === 'ring') {
+                    const angle = i * 0.05;
+                    const r = 15 + Math.random()*2;
+                    target[i3] = Math.cos(angle) * r;
+                    target[i3+1] = Math.sin(angle) * r;
+                    target[i3+2] = (Math.random()-0.5)*5;
+                }
+            }
+        };
+
+        // ANIM LOOP
+        const tick = () => {
+            const posAttr = geometry.attributes.position.array;
+            for(let i=0; i<count*3; i++) {
+                posAttr[i] += (target[i] - posAttr[i]) * 0.05;
+            }
+            geometry.attributes.position.needsUpdate = true;
+            mesh.rotation.y += 0.002;
+            renderer.render(scene, camera);
+            requestAnimationFrame(tick);
+        };
+        tick();
+
+        // UI INTERACTION
+        window.openDossier = (index) => {
+            sfx('click');
+            const agent = agents[index];
+            document.getElementById('dos-id').innerText = agent.id;
+            document.getElementById('dos-role').innerText = agent.role;
+            document.getElementById('dos-name').innerText = agent.name;
+            document.getElementById('dos-bio').innerText = agent.bio;
+            
+            document.getElementById('dossier-overlay').style.display = 'flex';
+            
+            // Animate Bars
+            setTimeout(() => {
+                document.getElementById('bar-lead').style.width = agent.stats[0] + "%";
+                document.getElementById('bar-tech').style.width = agent.stats[1] + "%";
+                document.getElementById('bar-creat').style.width = agent.stats[2] + "%";
+            }, 100);
+        };
+
+        window.closeDossier = () => {
+            document.getElementById('dossier-overlay').style.display = 'none';
+            document.getElementById('bar-lead').style.width = "0%";
+            document.getElementById('bar-tech').style.width = "0%";
+            document.getElementById('bar-creat').style.width = "0%";
+        };
+
+        // BOOT
+        setTimeout(() => {
+            document.getElementById('boot-screen').style.opacity = 0;
+            setTimeout(() => document.getElementById('boot-screen').style.display = 'none', 1000);
+            sfx('warp');
+        }, 3000);
+        
+        // MOUSE
+        document.addEventListener('mousemove', e => {
+            document.getElementById('cursor').style.left = e.clientX+'px';
+            document.getElementById('cursor').style.top = e.clientY+'px';
+            document.getElementById('cursor-dot').style.left = e.clientX+'px';
+            document.getElementById('cursor-dot').style.top = e.clientY+'px';
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>

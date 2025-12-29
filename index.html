@@ -199,9 +199,12 @@
         }
 
         .dossier-content { padding: 40px; position: relative; }
+        
+        /* FIX APPLIED HERE: Added z-index to ensure it sits above other content */
         .dossier-close {
             position: absolute; top: 20px; right: 20px; color: var(--red);
             font-family: 'Orbitron'; cursor: pointer; border: 1px solid var(--red); padding: 5px 10px;
+            z-index: 100; 
         }
         .dossier-close:hover { background: var(--red); color: black; }
 
